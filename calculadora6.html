@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Huella Ambiental - EDGE</title>
+<style>
+body, html {
+  margin: 0; padding: 0; font-family: "Segoe UI", sans-serif;
+  color: #333; height: 100%; overflow-x: hidden;
+  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+}
+header {
+  background: rgba(27,94,32,0.85); color:white; padding:1rem;
+  text-align:center; border-bottom:2px solid #1b5e20; box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+.container {
+  max-width:900px; margin:30px auto; background: rgba(255,255,255,0.95);
+  padding:25px; border-radius:20px; box-shadow:0 10px 30px rgba(0,0,0,0.2); backdrop-filter:blur(10px);
+}
+h2 { color: #1b5e20; text-align:center; }
+table { width:100%; border-collapse: collapse; margin-top:15px;}
+th, td { border:1px solid #ddd; padding:10px; text-align:center;}
+th { background: rgba(232,245,233,0.85);}
+input[type="number"], input[type="text"] { width:90%; padding:6px; border:1px solid #ccc; border-radius:5px;}
+.result { background: rgba(232,245,233,0.85); padding:12px; border-radius:10px; margin-top:25px; text-align:center; font-size:1.2em; font-weight:bold;}
+.ok { color:#2e7d32;}
+.high { color:#c62828;}
+button { background:#1b5e20; color:white; border:none; padding:10px 15px; border-radius:8px; cursor:pointer; font-size:1em; transition:0.3s; margin-top:15px;}
+button:hover { background:#145a16;}
+#canvasContainer, #canvasContainerAgua { display:none; justify-content:center; margin-top:25px; flex-wrap:wrap; gap:20px;}
+canvas { max-width:400px; max-height:400px; background: rgba(255,255,255,0.9); border-radius:50%; box-shadow:0 5px 15px rgba(0,0,0,0.2);}
+#legend, #legendAgua { display:flex; flex-direction:column; justify-content:center;}
+.legend-item { display:flex; align-items:center; margin-bottom:5px; font-weight:bold;}
+.legend-color { width:20px; height:20px; margin-right:8px; border-radius:4px;}
+hr { margin:40px 0; border: none; border-top: 2px solid #c8e6c9;}
+#globalContainer {
+  text-align:center; background:rgba(232,245,233,0.9);
+  border-radius:15px; padding:20px; margin-top:30px;
+  box-shadow:0 5px 15px rgba(0,0,0,0.1);
+}
+#globalContainer h3 { color:#1b5e20; }
+</style>
+</head>
+<body>
+
+<header>
+<h1>Calculadora de Huella Ambiental - Certificación EDGE</h1>
+<p>Evalúa el impacto ambiental total de tu proyecto (CO₂ y Agua)</p>
+</header>
+
+<div class="container">
+
+<!-- ================= HUELLA DE CARBONO ================= -->
+<h2>Huella de Carbono (Materiales)</h2>
+<p><strong>Área total construida (m²):</strong> 
+<input type="number" id="area" min="1" value="100">
+</p>
+
+<table id="tablaMateriales">
+<thead>
+<tr>
+<th>Material</th>
+<th>Cantidad total</th>
+<th>Unidad</th>
+<th>Factor de emisión (kg CO₂ / unidad)</th>
+<th>Eliminar</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<div style="text-align:center;">
+<button id="agregarMaterial">+ Agregar Material</button>
+<button id="btnCalcularCarbono">Calcular Huella de Carbono</button>
+</div>
+
+<div class="result" id="resultadoCarbono">CO₂ total: 0 kg</div>
+
+<div id="canvasContainer">
+<canvas id="pieCanvas" width="400" height="400"></canvas>
+<div id="legend"></div>
+</div>
+
+<hr>
+
+<!-- ================= HUELLA HÍDRICA ================= -->
+<h2>Huella Hídrica (Consumo de agua)</h2>
+<p><strong>Número de ocupantes del edificio:</strong>
+<input type="number" id="ocupantes" min="1" value="4">
+</p>
+
+<table id="tablaAgua">
+<thead>
+<tr>
+<th>Actividad</th>
+<th>Consumo total</th>
+<th>Unidad</th>
+<th>Factor hídrico (L / unidad)</th>
+<th>Eliminar</th>
+</tr>
+</thead>
+<tbody></tbody>
+</table>
+
+<div style="text-align:center;">
+<button id="agregarAgua">+ Agregar Actividad</button>
+<button id="btnCalcularAgua">Calcular Huella Hídrica</button>
+</div>
+
+<div class="result" id="resultadoAgua">Agua total: 0 L</div>
+
+<div id="canvasContainerAgua">
+<canvas id="pieCanvasAgua" width="400" height="400"></canvas>
+<div id="legendAgua"></div>
+</div>
+
+<hr>
+
+<!-- ================= RESULTADO GLOBAL ================= -->
+<div id="globalContainer">
+  <h3>Índice Ambiental Global (IAG)</h3>
+  <p id="resultadoGlobal">Por favor, calcula ambas huellas para ver el resultado global.</p>
+</div>
+
+</div>
+
+<script>
+/* =================== FUNCIONES DE APOYO =================== */
+function generarGrafico(canvasId, legendId, desglose, total, esAgua=false){
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const colores = esAgua ? ["#0277bd","#0288d1","#039be5","#03a9f4","#81d4fa","#26c6da","#00bcd4","#00838f"] :
+                           ["#2e7d32","#388e3c","#66bb6a","#81c784","#aed581","#ffb74d","#ff8a65","#d84315"];
+  let inicio = 0;
+  desglose.forEach((d,i)=>{
+    const valor = esAgua ? d.agua : d.co2;
+    const angulo = total ? (valor/total)*2*Math.PI : 0;
+    ctx.fillStyle = colores[i%colores.length];
+    ctx.beginPath();
+    ctx.moveTo(canvas.width/2,canvas.height/2);
+    ctx.arc(canvas.width/2,canvas.height/2,canvas.width/2-10,inicio,inicio+angulo);
+    ctx.closePath(); ctx.fill();
+    inicio+=angulo;
+  });
+  const legendDiv = document.getElementById(legendId);
+  legendDiv.innerHTML="";
+  desglose.forEach((d,i)=>{
+    const valor = esAgua ? d.agua : d.co2;
+    const porcentaje = total?((valor/total)*100).toFixed(1):0;
+    const item = document.createElement("div");
+    item.className="legend-item";
+    item.innerHTML=`<div class="legend-color" style="background:${colores[i%colores.length]}"></div>${d.name}: ${porcentaje}%`;
+    legendDiv.appendChild(item);
+  });
+}
+
+function actualizarIndiceGlobal(){
+  if(window.totalCO2 && window.totalAgua){
+    const area = parseFloat(document.getElementById("area").value)||1;
+    const ocup = parseFloat(document.getElementById("ocupantes").value)||1;
+    const co2m2 = window.totalCO2/area;
+    const aguapersona = window.totalAgua/ocup;
+    const limiteCO2 = 400, limiteAgua = 100000;
+
+    const indiceCarbono = Math.min(co2m2/limiteCO2,1);
+    const indiceAgua = Math.min(aguapersona/limiteAgua,1);
+    const iag = (indiceCarbono + indiceAgua)/2;
+
+    let estado = "", clase="";
+    if(iag <= 0.6) { estado = `🌿 Excelente sostenibilidad (IAG: ${(iag*100).toFixed(1)}%)`; clase="ok"; }
+    else if(iag <= 0.9) { estado = `⚠️ Aceptable (IAG: ${(iag*100).toFixed(1)}%)`; clase=""; }
+    else { estado = `🚨 Impacto ambiental alto (IAG: ${(iag*100).toFixed(1)}%)`; clase="high"; }
+
+    document.getElementById("resultadoGlobal").innerHTML = `
+      <strong>CO₂/m²:</strong> ${co2m2.toFixed(1)} kg<br>
+      <strong>Agua/persona:</strong> ${aguapersona.toFixed(1)} L<br><br>
+      <span class="${clase}">${estado}</span>`;
+  }
+}
+
+/* =================== HUELLA DE CARBONO =================== */
+function agregarFilaMaterial(nombre="Nuevo Material", cantidad=0, unidad="m²", factor=0){
+  const tbody = document.querySelector("#tablaMateriales tbody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" value="${nombre}"></td>
+    <td><input type="number" value="${cantidad}" min="0"></td>
+    <td><input type="text" value="${unidad}"></td>
+    <td><input type="number" value="${factor}" step="0.01" min="0"></td>
+    <td><button class="eliminar">X</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelector(".eliminar").addEventListener("click", ()=> tr.remove());
+}
+document.getElementById("agregarMaterial").addEventListener("click", ()=> agregarFilaMaterial());
+
+document.getElementById("btnCalcularCarbono").addEventListener("click", ()=>{
+  const rows = document.querySelectorAll("#tablaMateriales tbody tr");
+  window.totalCO2 = 0; const desglose = [];
+  rows.forEach(r=>{
+    const nombre = r.cells[0].querySelector("input").value;
+    const cantidad = parseFloat(r.cells[1].querySelector("input").value)||0;
+    const factor = parseFloat(r.cells[3].querySelector("input").value)||0;
+    const co2 = cantidad*factor;
+    window.totalCO2 += co2;
+    desglose.push({name:nombre, co2});
+  });
+  const area = parseFloat(document.getElementById("area").value)||1;
+  const co2PorM2 = window.totalCO2/area;
+  const limiteEDGE = 400;
+  let clase="", estado="";
+  if(co2PorM2<=limiteEDGE){ estado=`✅ Cumple EDGE (${co2PorM2.toFixed(1)} kg/m²)`; clase="ok";}
+  else{ estado=`⚠️ No cumple EDGE (${co2PorM2.toFixed(1)} kg/m²)`; clase="high";}
+  document.getElementById("resultadoCarbono").innerHTML = `CO₂ total: ${window.totalCO2.toFixed(2)} kg<br><span class="${clase}">${estado}</span>`;
+  generarGrafico("pieCanvas","legend",desglose,window.totalCO2);
+  document.getElementById("canvasContainer").style.display="flex";
+  actualizarIndiceGlobal();
+});
+
+/* =================== HUELLA HÍDRICA =================== */
+function agregarFilaAgua(nombre="Nueva Actividad", cantidad=0, unidad="L", factor=0){
+  const tbody = document.querySelector("#tablaAgua tbody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td><input type="text" value="${nombre}"></td>
+    <td><input type="number" value="${cantidad}" min="0"></td>
+    <td><input type="text" value="${unidad}"></td>
+    <td><input type="number" value="${factor}" step="0.01" min="0"></td>
+    <td><button class="eliminar">X</button></td>`;
+  tbody.appendChild(tr);
+  tr.querySelector(".eliminar").addEventListener("click", ()=> tr.remove());
+}
+document.getElementById("agregarAgua").addEventListener("click", ()=> agregarFilaAgua());
+
+document.getElementById("btnCalcularAgua").addEventListener("click", ()=>{
+  const rows = document.querySelectorAll("#tablaAgua tbody tr");
+  window.totalAgua = 0; const desglose = [];
+  rows.forEach(r=>{
+    const nombre = r.cells[0].querySelector("input").value;
+    const cantidad = parseFloat(r.cells[1].querySelector("input").value)||0;
+    const factor = parseFloat(r.cells[3].querySelector("input").value)||0;
+    const agua = cantidad*factor;
+    window.totalAgua += agua;
+    desglose.push({name:nombre, agua});
+  });
+  const ocupantes = parseFloat(document.getElementById("ocupantes").value)||1;
+  const aguaPorPersona = window.totalAgua/ocupantes;
+  const limiteAgua = 100000;
+  let clase="", estado="";
+  if(aguaPorPersona<=limiteAgua){ estado=`💧 Eficiente (${aguaPorPersona.toFixed(1)} L/persona)`; clase="ok";}
+  else{ estado=`⚠️ Alto consumo (${aguaPorPersona.toFixed(1)} L/persona)`; clase="high";}
+  document.getElementById("resultadoAgua").innerHTML = `Agua total: ${window.totalAgua.toFixed(2)} L<br><span class="${clase}">${estado}</span>`;
+  generarGrafico("pieCanvasAgua","legendAgua",desglose,window.totalAgua,true);
+  document.getElementById("canvasContainerAgua").style.display="flex";
+  actualizarIndiceGlobal();
+});
+
+/* =================== DATOS INICIALES =================== */
+agregarFilaMaterial("Panel de yeso",0,"m²",8.5);
+agregarFilaMaterial("Chapa acanalada",0,"m²",12.3);
+agregarFilaMaterial("Lana de vidrio",0,"m²",3.4);
+agregarFilaAgua("Ducha",0,"veces",50);
+agregarFilaAgua("Lavado de ropa",0,"ciclos",100);
+agregarFilaAgua("Riego de jardín",0,"horas",500);
+</script>
+</body>
+</html>
